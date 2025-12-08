@@ -150,31 +150,50 @@
     );
   }
 
-  async function loadCardsAndInit() {
-    const root = document.querySelector('.og');
-    if (!root) {
-      console.warn('[rare-stones] .og が見つかりません');
-      return;
-    }
+function loadCardsAndInit() {
+  // ルート（.og）とグリッド（#og-grid）を取得
+  const root = document.querySelector(".og");
+  if (!root) return;
 
-    const grid =
-      root.querySelector('#og-grid') ||
-      document.getElementById('og-grid');
-    if (!grid) {
-      console.warn('[rare-stones] #og-grid が見つかりません');
-      return;
-    }
+  const grid = root.querySelector("#og-grid") || document.getElementById("og-grid");
+  if (!grid) return;
 
-    const src = grid.getAttribute('data-cards-src');
+  const src = grid.getAttribute("data-cards-src");
 
-    // data-cards-src が無ければ、カードはすでにHTML内にある前提
-    if (!src) {
-      console.log(
-        '[rare-stones] data-cards-src なし → そのまま初期化'
-      );
+  // data-cards-src が無い場合 → そのままフィルタ初期化（従来通り）
+  if (!src) {
+    console.log("rare-stones-filter: data-cards-src なし → 直書きカードを使用");
+    initRareStoneFilter(root, grid);
+    return;
+  }
+
+  // 外部 HTML からカードを読み込む
+  console.log("rare-stones-filter: カードHTMLを取得:", src);
+
+  fetch(src, { cache: "no-cache" })
+    .then((res) => {
+      if (!res.ok) {
+        throw new Error("HTTP status " + res.status);
+      }
+      return res.text();
+    })
+    .then((html) => {
+      console.log("rare-stones-filter: カードHTML取得成功 / length=", html.length);
+
+      // ★ 余計なことはせず、そのまま差し込む
+      grid.innerHTML = html;
+
+      // 差し込んだカードを元にフィルタ初期化
       initRareStoneFilter(root, grid);
-      return;
-    }
+    })
+    .catch((err) => {
+      console.error("rare-stones-filter: カードHTML読み込みエラー", err);
+
+      // 失敗しても、もしページ内に直書きのカードがあればそれで動かす
+      initRareStoneFilter(root, grid);
+    });
+}
+
 
     try {
       console.log(
