@@ -1,14 +1,14 @@
-(function () {
-  console.log("cards-loader v2 start");
+;(function () {
+  console.log("cards-loader all-in-one start");
 
   // ================================
   //  フィルタ処理
   // ================================
-  function initFilter() {
+  function initFilter(root, grid) {
     console.log("initFilter start");
 
-    var root = document.querySelector(".og") || document;
-    var grid = document.getElementById("og-grid");
+    if (!root) root = document;
+    if (!grid) grid = document.getElementById("og-grid");
     if (!grid) {
       console.log("#og-grid が見つかりません");
       return;
@@ -20,7 +20,7 @@
       return;
     }
 
-    // ★5 → ★2、同じ★なら名前順に並べ替え
+    // ★5 → ★2、同じ★なら名前順
     cards.sort(function (a, b) {
       var ra = Number(a.getAttribute("data-rare") || 0);
       var rb = Number(b.getAttribute("data-rare") || 0);
@@ -60,7 +60,7 @@
       cards.forEach(function (card) {
         var show = true;
 
-        // タブ（インクォーツ系・隕石系など）でのフィルタ
+        // タブ（インクォーツ系・隕石系など）
         if (currentTab !== "all" && currentTab !== "rare") {
           var gAttr = card.getAttribute("data-group") || "";
           var groups = gAttr.split(/\s+/);
@@ -107,7 +107,7 @@
       });
     });
 
-    // レア度チップ（★★★★★ や ★★★ など）
+    // レア度チップ
     Array.prototype.forEach.call(rareChips, function (chip) {
       chip.addEventListener("click", function () {
         var filter = chip.getAttribute("data-filter") || "*";
@@ -119,12 +119,11 @@
         if (filter === "*") {
           currentRare = null;
         } else {
-          // [data-rare="5"] → 5 を取り出す
           var m = filter.match(/"(\d)"/);
           currentRare = m ? Number(m[1]) : null;
         }
 
-        // レア度チップを押したらタブも「レア度」に揃える
+        // レア度チップを押したらタブも「レア度」に
         currentTab = "rare";
         Array.prototype.forEach.call(tabButtons, function (b) {
           var t = b.getAttribute("data-tab") || b.dataset.tab;
@@ -148,7 +147,7 @@
   }
 
   // ================================
-  //  カードHTMLを読み込んでからフィルタを初期化
+  //  カードHTMLを読み込んでからフィルタ初期化
   // ================================
   function loadCardsAndInit() {
     console.log("onReady called");
@@ -162,9 +161,9 @@
     var src = grid.getAttribute("data-cards-src");
     console.log("data-cards-src =", src);
 
-    // data-cards-src が無いなら、そのままフィルタ初期化
+    // data-cards-src が無い場合 → そのままフィルタだけ
     if (!src) {
-      initFilter();
+      initFilter(document.querySelector(".og") || document, grid);
       return;
     }
 
@@ -179,7 +178,7 @@
           "カードHTMLを挿入しました length =",
           xhr.responseText.length
         );
-        initFilter(); // 読み込み後にフィルタ実行
+        initFilter(document.querySelector(".og") || document, grid);
       } else {
         console.log("カード読み込み失敗 status =", xhr.status);
       }
