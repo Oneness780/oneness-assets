@@ -1,58 +1,18 @@
 (function () {
-  console.log("cards-loader+filter start");
+  console.log("cards-loader v2 start");
 
   // ================================
-  //  HTMLカードを読み込んでからフィルタ初期化
+  //  フィルタ処理
   // ================================
-  function loadCardsAndInit() {
-    console.log("onReady called");
+  function initFilter() {
+    console.log("initFilter start");
 
+    var root = document.querySelector(".og") || document;
     var grid = document.getElementById("og-grid");
     if (!grid) {
       console.log("#og-grid が見つかりません");
       return;
     }
-
-    var src = grid.getAttribute("data-cards-src");
-    console.log("data-cards-src =", src);
-
-    // data-cards-src が無い場合 → そのまま初期化
-    if (!src) {
-      initFilter(grid);
-      return;
-    }
-
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", src, true);
-
-    xhr.onload = function () {
-      console.log("XHR onload status =", xhr.status);
-      if (xhr.status >= 200 && xhr.status < 300) {
-        grid.innerHTML = xhr.responseText;
-        console.log(
-          "カードHTMLを挿入しました length =",
-          xhr.responseText.length
-        );
-        initFilter(grid); // ★ 読み込み後にフィルタをセット
-      } else {
-        console.log("カード読み込み失敗 status =", xhr.status);
-      }
-    };
-
-    xhr.onerror = function () {
-      console.log("XHR error で読み込み失敗");
-    };
-
-    xhr.send();
-  }
-
-  // ================================
-  //  フィルタ・タブ・レア度チップの処理
-  // ================================
-  function initFilter(grid) {
-    console.log("initFilter start");
-
-    var root = document.querySelector(".og") || document;
 
     var cards = Array.prototype.slice.call(grid.querySelectorAll(".card"));
     if (!cards.length) {
@@ -60,7 +20,7 @@
       return;
     }
 
-    // --- レア度順にソート（★5 → ★2、同じなら名前順） ---
+    // ★5 → ★2、同じ★なら名前順に並べ替え
     cards.sort(function (a, b) {
       var ra = Number(a.getAttribute("data-rare") || 0);
       var rb = Number(b.getAttribute("data-rare") || 0);
@@ -76,9 +36,8 @@
       grid.appendChild(c);
     });
 
-    // 状態
-    var currentTab = "all"; // all / rare / inquartz / meteor / ...
-    var currentRare = null; // null = すべて, 2〜5 = 指定レア度
+    var currentTab = "all";   // all / rare / inquartz / meteor / ...
+    var currentRare = null;   // null = すべて, 2〜5 = 特定レア度
 
     var tabButtons = root.querySelectorAll(".tab-btn");
     var rareChips = root.querySelectorAll("#chips-rare .chip");
@@ -99,26 +58,26 @@
 
     function applyFilter() {
       cards.forEach(function (card) {
-        var vis = true;
+        var show = true;
 
-        // --- タブによるグループフィルタ ---
+        // タブ（インクォーツ系・隕石系など）でのフィルタ
         if (currentTab !== "all" && currentTab !== "rare") {
           var gAttr = card.getAttribute("data-group") || "";
           var groups = gAttr.split(/\s+/);
-          vis = groups.indexOf(currentTab) !== -1;
+          show = groups.indexOf(currentTab) !== -1;
         }
 
-        // --- 「レア度」タブのときだけ★フィルタ ---
-        if (vis && currentTab === "rare" && currentRare !== null) {
+        // レア度タブのときだけ★フィルタ
+        if (show && currentTab === "rare" && currentRare !== null) {
           var r = Number(card.getAttribute("data-rare") || 0);
-          vis = r === currentRare;
+          show = r === currentRare;
         }
 
-        card.style.display = vis ? "" : "none";
+        card.style.display = show ? "" : "none";
       });
     }
 
-    // --- タブボタン（全て / レア度順 / InQuartz / …）---
+    // タブボタン（全て／レア度順／インクォーツ系…）
     Array.prototype.forEach.call(tabButtons, function (btn) {
       btn.addEventListener("click", function () {
         var tab = btn.getAttribute("data-tab") || btn.dataset.tab;
@@ -133,7 +92,7 @@
           b.classList.toggle("is-active", active);
         });
 
-        // レアタブ以外に移動したら★フィルタをリセット
+        // レア以外に移動したら★フィルタ解除
         if (currentTab !== "rare") {
           currentRare = null;
           Array.prototype.forEach.call(rareChips, function (c) {
@@ -148,7 +107,7 @@
       });
     });
 
-    // --- レア度チップ（★★★★★ / ★★★★ …） ---
+    // レア度チップ（★★★★★ や ★★★ など）
     Array.prototype.forEach.call(rareChips, function (chip) {
       chip.addEventListener("click", function () {
         var filter = chip.getAttribute("data-filter") || "*";
@@ -160,12 +119,12 @@
         if (filter === "*") {
           currentRare = null;
         } else {
-          // 例: [data-rare="5"] → 5 を取り出す
+          // [data-rare="5"] → 5 を取り出す
           var m = filter.match(/"(\d)"/);
           currentRare = m ? Number(m[1]) : null;
         }
 
-        // レア度チップを触ったらタブも「レア度」に合わせる
+        // レア度チップを押したらタブも「レア度」に揃える
         currentTab = "rare";
         Array.prototype.forEach.call(tabButtons, function (b) {
           var t = b.getAttribute("data-tab") || b.dataset.tab;
@@ -189,7 +148,52 @@
   }
 
   // ================================
-  //  DOM 準備できたら開始
+  //  カードHTMLを読み込んでからフィルタを初期化
+  // ================================
+  function loadCardsAndInit() {
+    console.log("onReady called");
+
+    var grid = document.getElementById("og-grid");
+    if (!grid) {
+      console.log("#og-grid が見つかりません");
+      return;
+    }
+
+    var src = grid.getAttribute("data-cards-src");
+    console.log("data-cards-src =", src);
+
+    // data-cards-src が無いなら、そのままフィルタ初期化
+    if (!src) {
+      initFilter();
+      return;
+    }
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", src, true);
+
+    xhr.onload = function () {
+      console.log("XHR onload status =", xhr.status);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        grid.innerHTML = xhr.responseText;
+        console.log(
+          "カードHTMLを挿入しました length =",
+          xhr.responseText.length
+        );
+        initFilter(); // 読み込み後にフィルタ実行
+      } else {
+        console.log("カード読み込み失敗 status =", xhr.status);
+      }
+    };
+
+    xhr.onerror = function () {
+      console.log("XHR error で読み込み失敗");
+    };
+
+    xhr.send();
+  }
+
+  // ================================
+  //  DOM 準備完了後に開始
   // ================================
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", loadCardsAndInit);
