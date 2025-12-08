@@ -277,27 +277,37 @@
       });
     });
 
-    // 戻る/進むボタン対応
-    window.addEventListener("hashchange", function () {
-      state = parseHash();
-      if (!TAB_FILTER[state.tab] && state.tab !== "rare") {
-        state.tab = "all";
-        state.filter = "*";
-      }
+  // 戻る/進むボタン対応
+  window.addEventListener("hashchange", function () {
+    const rawHash = location.hash || "";
 
-      activateTab(state.tab);
-      setActiveExplain(state.tab);
+    // ★ ここがポイント ★
+    // #ichiran や #about-rarestone など、
+    // 「タブ切り替え用ではないハッシュ」のときは何もしない
+    if (!rawHash.includes("tab=")) {
+      return;
+    }
 
-      const filterToUse =
-        state.tab === "rare"
-          ? state.filter
-          : TAB_FILTER[state.tab] || "*";
+    state = parseHash();
+    if (!TAB_FILTER[state.tab] && state.tab !== "rare") {
+      state.tab = "all";
+      state.filter = "*";
+    }
 
-      showCards(filterToUse, state.tab);
-      if (state.tab === "rare") {
-        setActiveRareChip(state.filter);
-      }
-    });
+    activateTab(state.tab);
+    setActiveExplain(state.tab);
+
+    const filterToUse =
+      state.tab === "rare"
+        ? state.filter
+        : TAB_FILTER[state.tab] || "*";
+
+    showCards(filterToUse, state.tab);
+    if (state.tab === "rare") {
+      setActiveRareChip(state.filter);
+    }
+  });
+
   }
 
   // ================================
