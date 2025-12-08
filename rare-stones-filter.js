@@ -1,28 +1,28 @@
 (function () {
-  console.log("rare-stones-filter.js initialized");
+  console.log("rare-stones-filter.js loaded");
 
-  // =====================================
-  // DOM 準備ができてからスタート
-  // =====================================
-  window.addEventListener("DOMContentLoaded", function () {
-    console.log("rare-stones-filter: DOMContentLoaded");
+  // ================================
+  //  エントリーポイント
+  // ================================
+  function start() {
+    console.log("rare-stones-filter: start()");
 
-    const root = document.querySelector(".og");
+    var root = document.querySelector(".og");
     if (!root) {
       console.log("rare-stones-filter: .og が見つかりません");
       return;
     }
 
-    const grid = root.querySelector("#og-grid") || document.getElementById("og-grid");
+    var grid = root.querySelector("#og-grid") || document.getElementById("og-grid");
     if (!grid) {
       console.log("rare-stones-filter: #og-grid が見つかりません");
       return;
     }
 
-    const src = grid.getAttribute("data-cards-src") || "";
+    var src = grid.getAttribute("data-cards-src") || "";
     console.log("rare-stones-filter: data-cards-src =", src);
 
-    // data-cards-src があれば外部HTMLからカードを取得
+    // 外部HTMLからカードを取得
     if (src) {
       fetch(src, { cache: "no-cache" })
         .then(function (res) {
@@ -33,7 +33,10 @@
           return res.text();
         })
         .then(function (html) {
-          console.log("rare-stones-filter: カードHTML取得成功 length =", html.length);
+          console.log(
+            "rare-stones-filter: カードHTML取得成功 length =",
+            html.length
+          );
 
           // 外部HTMLをそのまま差し込む
           grid.innerHTML = html;
@@ -47,32 +50,39 @@
           initRareStoneFilter(root, grid);
         });
     } else {
-      // inline カードのみの場合
       console.log("rare-stones-filter: data-cards-src なし → 直書きカードで初期化");
       initRareStoneFilter(root, grid);
     }
-  });
+  }
 
-  // =====================================
-  // フィルタ本体
-  // =====================================
+  // DOM 読み込み状態に応じて start() を呼ぶ
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    // すでに DOM が出来上がっている場合はこちら
+    start();
+  }
+
+  // ================================
+  //  フィルタ本体
+  // ================================
   function initRareStoneFilter(root, grid) {
     console.log("rare-stones-filter: initRareStoneFilter start");
 
-    const cards = Array.prototype.slice.call(grid.querySelectorAll(".card"));
+    var cards = Array.prototype.slice.call(grid.querySelectorAll(".card"));
     if (!cards.length) {
       console.log("rare-stones-filter: カードが 0 件です");
       return;
     }
 
-    const tabs = root.querySelectorAll('.tab-btn[role="tab"]');
-    const rareSelector = root.querySelector("#sel-rare");
-    const explainBlocks = root.querySelectorAll(".og-explain .explain-block");
+    var tabs = root.querySelectorAll('.tab-btn[role="tab"]');
+    var rareSelector = root.querySelector("#sel-rare");
+    var explainBlocks = root.querySelectorAll(".og-explain .explain-block");
 
     // タブごとのフィルタ種別
-    const TAB_FILTER = {
+    var TAB_FILTER = {
       all:      { type: "all" },
-      rare:     { type: "rare" },               // レア度チップで制御
+      rare:     { type: "rare" }, // レア度チップで制御
       inquartz: { type: "group", value: "inquartz" },
       meteor:   { type: "group", value: "meteor" },
       rarecolor:{ type: "group", value: "rarecolor" },
@@ -81,8 +91,8 @@
       uv:       { type: "flag",  value: "uv" }
     };
 
-    let activeTab = "all";
-    let rareFilter = "*"; // rare タブ用（"*" or "5" "4" "3" "2"）
+    var activeTab = "all";
+    var rareFilter = "*"; // rare タブ用（"*" or "5" "4" "3" "2"）
 
     // 説明文の表示切替
     function setActiveExplain(tab) {
@@ -117,7 +127,7 @@
       if (tabConfig.type === "rare") {
         var r = card.getAttribute("data-rare") || "";
         if (rareFilterValue !== "*" && r !== rareFilterValue) return false;
-        return true; // rare タブでは他の条件なし
+        return true;
       }
 
       // other タブ（all / group / flag）
@@ -166,7 +176,7 @@
     Array.prototype.forEach.call(tabs, function (btn) {
       btn.addEventListener("click", function () {
         var tab = btn.getAttribute("data-tab");
-        if (!tab || !TAB_FILTER[tab] && tab !== "rare") {
+        if (!tab || (!TAB_FILTER[tab] && tab !== "rare")) {
           tab = "all";
         }
 
