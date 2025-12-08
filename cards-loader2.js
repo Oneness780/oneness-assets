@@ -1,195 +1,241 @@
-;(function () {
-  console.log("rare-stones cards-loader v3 start");
+(function () {
+  const root = document.querySelector('.og');
+  if (!root) return;
 
-  // ================================
-  //  初期処理：カードHTMLを読み込んでからフィルタ初期化
-  // ================================
-  function init() {
-    var grid = document.getElementById("og-grid");
-    if (!grid) {
-      console.log("#og-grid not found");
-      return;
+  const grid =
+    root.querySelector('#og-grid') || document.getElementById('og-grid');
+  if (!grid) return;
+
+  const tabs = root.querySelectorAll('.tab-btn[role="tab"]');
+  const rareSelector = root.querySelector('#sel-rare');
+  const explainBlocks = root.querySelectorAll('.og-explain .explain-block');
+
+  const TAB_FILTER = {
+    all: '*',
+    inquartz: '[data-group="inquartz"]',
+    meteor: '[data-group="meteor"]',
+    rare: '*',
+    rarecolor: '[data-group="rarecolor"]',
+    hq: '[data-flag="hq"]',
+    star: '[data-flag="star"]',
+    uv: '[data-flag="uv"]',
+  };
+
+  function matchCard(card, filter) {
+    if (!filter || filter === '*') return true;
+
+    // .class 指定が来た場合（保険）
+    if (filter[0] === '.') {
+      return card.classList.contains(filter.slice(1));
     }
 
-    var src = grid.getAttribute("data-cards-src");
-    console.log("data-cards-src =", src);
+    // [data-xxx="yyy"] 形式
+    const m = filter.match(/^\[data-([^=]+)="?([^\]"]+)"?\]$/);
+    if (m) {
+      const key = m[1];
+      const val = m[2];
+      const raw = (card.dataset && card.dataset[key]) || '';
 
-    // data-cards-src がない場合 → そのままフィルタだけ
-    if (!src) {
-      initFilter(grid);
-      return;
+      const tokens = raw
+        .split(/[,\s、]+/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+      return tokens.length ? tokens.includes(val) : raw === val;
     }
+    return false;
+  }
 
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", src, true);
+  function normalizeYomi(str) {
+    if (!str) return '';
+    let s = String(str).toLowerCase();
+    s = s.replace(/ー/g, '');
+    return s;
+  }
 
-    xhr.onload = function () {
-      console.log("XHR onload status =", xhr.status);
-      if (xhr.status >= 200 && xhr.status < 300) {
-        grid.innerHTML = xhr.responseText;
-        console.log("カードHTMLを挿入しました length =", xhr.responseText.length);
-        initFilter(grid);
-      } else {
-        console.log("カード読み込み失敗 status =", xhr.status);
+  // レア度タブ用 並び替え
+  function sortVisibleCards(visible, tab, filter) {
+    if (tab !== 'rare') return;
+
+    visible.sort((a, b) => {
+      const ra = parseInt(a.dataset.rare || '0', 10);
+      const rb = parseInt(b.dataset.rare || '0', 10);
+
+      // 「すべて」のときは ★の高い順 → よみ順
+      if (filter === '*' || !filter) {
+        if (ra !== rb) return rb - ra;
       }
+
+      const ya = normalizeYomi(a.dataset.yomi || '');
+      const yb = normalizeYomi(b.dataset.yomi || '');
+      return ya.localeCompare(yb, 'ja');
+    });
+
+    visible.forEach((node) => grid.appendChild(node));
+  }
+
+  function setActiveExplain(tab) {
+    if (!explainBlocks.length) return;
+    explainBlocks.forEach((block) => {
+      block.classList.toggle('is-active', block.dataset.tab === tab);
+    });
+  }
+
+  function showCards(filter, tab) {
+    const cards = Array.from(grid.querySelectorAll('.card'));
+    const visible = [];
+
+    cards.forEach((card) => {
+      if (matchCard(card, filter)) {
+        card.style.display = '';
+        visible.push(card);
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    // レア度タブのときは並び替え
+    sortVisibleCards(visible, tab, filter);
+
+    // フェードリセット
+    visible.forEach((card) => {
+      card.style.transitionDelay = '';
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(8px)';
+    });
+
+    // ふわっと表示
+    requestAnimationFrame(() => {
+      visible.forEach((card, i) => {
+        card.style.transitionDelay = i * 40 + 'ms';
+        card.style.opacity = '1';
+        card.style.transform = 'translateY(0)';
+      });
+    });
+  }
+
+  function setActiveRareChip(filter) {
+    if (!rareSelector) return;
+    rareSelector
+      .querySelectorAll('.chip')
+      .forEach((c) => c.classList.remove('is-active'));
+    const btn = rareSelector.querySelector(`.chip[data-filter="${filter}"]`);
+    if (btn) btn.classList.add('is-active');
+  }
+
+  function activateTab(tab) {
+    tabs.forEach((btn) => {
+      btn.setAttribute('aria-selected', String(btn.dataset.tab === tab));
+    });
+    // レア度タブのときだけ第2セレクタを表示
+    if (rareSelector) {
+      rareSelector.classList.toggle('is-active', tab === 'rare');
+    }
+  }
+
+  function parseHash() {
+    const h = location.hash.replace(/^#/, '');
+    if (!h) return { tab: 'all', filter: '*' };
+    const params = new URLSearchParams(h.replace(/&/g, '&'));
+    return {
+      tab: params.get('tab') || 'all',
+      filter: params.get('filter') || '*',
     };
-
-    xhr.onerror = function () {
-      console.log("XHR error");
-    };
-
-    xhr.send();
   }
 
-  // ================================
-  //  フィルタ処理（タブ＋レア度チップ）
-  // ================================
-  function initFilter(grid) {
-    console.log("initFilter start");
-
-    var root = document.querySelector(".og") || document;
-    var cards = Array.prototype.slice.call(grid.querySelectorAll(".card"));
-    if (!cards.length) {
-      console.log("カードがありません");
-      return;
+  function setHash(tab, filter, replace) {
+    const hash = `#tab=${encodeURIComponent(tab)}&filter=${encodeURIComponent(
+      filter,
+    )}`;
+    if (replace) {
+      history.replaceState(null, '', hash);
+    } else {
+      location.hash = hash;
     }
-
-    // ★5 → ★2、同じ★なら名前順で並び替え
-    cards.sort(function (a, b) {
-      var ra = Number(a.getAttribute("data-rare") || 0);
-      var rb = Number(b.getAttribute("data-rare") || 0);
-      if (ra !== rb) return rb - ra;
-
-      var ha = a.querySelector("h3");
-      var hb = b.querySelector("h3");
-      var ta = ha ? ha.textContent.trim() : "";
-      var tb = hb ? hb.textContent.trim() : "";
-      return ta.localeCompare(tb, "ja");
-    });
-    cards.forEach(function (c) {
-      grid.appendChild(c);
-    });
-
-    var tabButtons = root.querySelectorAll(".tab-btn");
-    var rareChips = root.querySelectorAll("#chips-rare .chip");
-    var explainBlocks = root.querySelectorAll(".og-explain .explain-block");
-    var rareSelector = document.getElementById("sel-rare");
-
-    var currentTab = "all";   // all / rare / inquartz / meteor / ...
-    var currentRare = null;   // null = すべて, 2〜5 = 特定レア度
-
-    function updateExplain() {
-      Array.prototype.forEach.call(explainBlocks, function (b) {
-        var tab = b.getAttribute("data-tab");
-        b.style.display = tab === currentTab ? "" : "none";
-      });
-    }
-
-    function updateRareSelector() {
-      if (!rareSelector) return;
-      rareSelector.style.display = currentTab === "rare" ? "" : "none";
-    }
-
-    function applyFilter() {
-      cards.forEach(function (card) {
-        var show = true;
-
-        // タブ（インクォーツ系・隕石系など）
-        if (currentTab !== "all" && currentTab !== "rare") {
-          var gAttr = card.getAttribute("data-group") || "";
-          var groups = gAttr.split(/\s+/);
-          show = groups.indexOf(currentTab) !== -1;
-        }
-
-        // 「レア度順」タブのときだけ★フィルタ
-        if (show && currentTab === "rare" && currentRare !== null) {
-          var r = Number(card.getAttribute("data-rare") || 0);
-          show = r === currentRare;
-        }
-
-        card.style.display = show ? "" : "none";
-      });
-    }
-
-    // タブボタン（全て／レア度順／インクォーツ系…）
-    Array.prototype.forEach.call(tabButtons, function (btn) {
-      btn.addEventListener("click", function () {
-        var tab = btn.getAttribute("data-tab") || btn.dataset.tab;
-        if (!tab || tab === currentTab) return;
-
-        currentTab = tab;
-
-        Array.prototype.forEach.call(tabButtons, function (b) {
-          var t = b.getAttribute("data-tab") || b.dataset.tab;
-          var active = t === currentTab;
-          b.setAttribute("aria-selected", active ? "true" : "false");
-          if (active) b.classList.add("is-active");
-          else b.classList.remove("is-active");
-        });
-
-        // 「レア度順」以外に移動したら★フィルタ解除
-        if (currentTab !== "rare") {
-          currentRare = null;
-          Array.prototype.forEach.call(rareChips, function (c) {
-            var f = c.getAttribute("data-filter") || "*";
-            if (f === "*") c.classList.add("is-active");
-            else c.classList.remove("is-active");
-          });
-        }
-
-        updateExplain();
-        updateRareSelector();
-        applyFilter();
-      });
-    });
-
-    // レア度チップ（★★★★★～★★）
-    Array.prototype.forEach.call(rareChips, function (chip) {
-      chip.addEventListener("click", function () {
-        var filter = chip.getAttribute("data-filter") || "*";
-
-        Array.prototype.forEach.call(rareChips, function (c) {
-          if (c === chip) c.classList.add("is-active");
-          else c.classList.remove("is-active");
-        });
-
-        if (filter === "*") {
-          currentRare = null;
-        } else {
-          var m = filter.match(/"(\d)"/);
-          currentRare = m ? Number(m[1]) : null;
-        }
-
-        // チップを押したらタブも「レア度順」に
-        currentTab = "rare";
-        Array.prototype.forEach.call(tabButtons, function (b) {
-          var t = b.getAttribute("data-tab") || b.dataset.tab;
-          var active = t === "rare";
-          b.setAttribute("aria-selected", active ? "true" : "false");
-          if (active) b.classList.add("is-active");
-          else b.classList.remove("is-active");
-        });
-
-        updateExplain();
-        updateRareSelector();
-        applyFilter();
-      });
-    });
-
-    // 初期表示
-    updateExplain();
-    updateRareSelector();
-    applyFilter();
-
-    console.log("initFilter done");
   }
 
-  // ================================
-  //  DOM 準備完了後に init 実行
-  // ================================
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
+  // ===== 初期状態 =====
+  let state = parseHash();
+  if (!TAB_FILTER[state.tab] && state.tab !== 'rare') {
+    state.tab = 'all';
+    state.filter = '*';
   }
+
+  // rareで入ったときも、とにかく「すべて」スタート
+  if (state.tab === 'rare') {
+    state.filter = '*';
+  }
+
+  activateTab(state.tab);
+  setActiveExplain(state.tab);
+
+  let initialFilter = state.filter;
+  if (state.tab !== 'rare') {
+    initialFilter = TAB_FILTER[state.tab] || '*';
+  }
+
+  showCards(initialFilter, state.tab);
+  if (state.tab === 'rare') setActiveRareChip(state.filter);
+  if (!location.hash) setHash(state.tab, state.filter, true);
+
+  // ===== レア度チップクリック =====
+  if (rareSelector) {
+    rareSelector.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      if (state.tab !== 'rare') return;
+
+      state.filter = chip.dataset.filter || '*';
+      showCards(state.filter, state.tab);
+      setActiveRareChip(state.filter);
+      setHash(state.tab, state.filter, false);
+    });
+  }
+
+  // ===== タブクリック =====
+  tabs.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      state.tab = tab;
+
+      if (tab === 'rare') {
+        state.filter = '*'; // 必ず「すべて」から
+      } else {
+        state.filter = TAB_FILTER[tab] || '*';
+      }
+
+      activateTab(state.tab);
+      setActiveExplain(state.tab);
+
+      const filterToUse = tab === 'rare' ? '*' : TAB_FILTER[tab] || '*';
+      showCards(filterToUse, state.tab);
+
+      if (tab === 'rare') {
+        setActiveRareChip('*');
+      }
+      setHash(state.tab, state.filter, false);
+    });
+  });
+
+  // ===== 戻る/進むボタン =====
+  window.addEventListener('hashchange', () => {
+    state = parseHash();
+    if (!TAB_FILTER[state.tab] && state.tab !== 'rare') {
+      state.tab = 'all';
+      state.filter = '*';
+    }
+
+    activateTab(state.tab);
+    setActiveExplain(state.tab);
+
+    const filterToUse =
+      state.tab === 'rare' ? state.filter : TAB_FILTER[state.tab] || '*';
+
+    showCards(filterToUse, state.tab);
+    if (state.tab === 'rare') {
+      setActiveRareChip(state.filter);
+    }
+  });
+
+  console.log('rare-stones-filter.js initialized');
 })();
