@@ -1,26 +1,60 @@
 ;(function () {
-  console.log("cards-loader all-in-one start");
+  console.log("rare-stones cards-loader v3 start");
 
   // ================================
-  //  フィルタ処理
+  //  初期処理：カードHTMLを読み込んでからフィルタ初期化
   // ================================
-  function initFilter(root, grid) {
+  function init() {
+    var grid = document.getElementById("og-grid");
+    if (!grid) {
+      console.log("#og-grid not found");
+      return;
+    }
+
+    var src = grid.getAttribute("data-cards-src");
+    console.log("data-cards-src =", src);
+
+    // data-cards-src がない場合 → そのままフィルタだけ
+    if (!src) {
+      initFilter(grid);
+      return;
+    }
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", src, true);
+
+    xhr.onload = function () {
+      console.log("XHR onload status =", xhr.status);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        grid.innerHTML = xhr.responseText;
+        console.log("カードHTMLを挿入しました length =", xhr.responseText.length);
+        initFilter(grid);
+      } else {
+        console.log("カード読み込み失敗 status =", xhr.status);
+      }
+    };
+
+    xhr.onerror = function () {
+      console.log("XHR error");
+    };
+
+    xhr.send();
+  }
+
+  // ================================
+  //  フィルタ処理（タブ＋レア度チップ）
+  // ================================
+  function initFilter(grid) {
     console.log("initFilter start");
 
-    if (!root) root = document;
-    if (!grid) grid = document.getElementById("og-grid");
-    if (!grid) {
-      console.log("#og-grid が見つかりません");
-      return;
-    }
-
+    var root = document.querySelector(".og") || document;
     var cards = Array.prototype.slice.call(grid.querySelectorAll(".card"));
     if (!cards.length) {
-      console.log("card が見つかりません");
+      console.log("カードがありません");
       return;
     }
 
-    // ★5 → ★2、同じ★なら名前順
+    // ★5 → ★2、同じ★なら名前順で並び替え
     cards.sort(function (a, b) {
       var ra = Number(a.getAttribute("data-rare") || 0);
       var rb = Number(b.getAttribute("data-rare") || 0);
@@ -36,13 +70,13 @@
       grid.appendChild(c);
     });
 
-    var currentTab = "all";   // all / rare / inquartz / meteor / ...
-    var currentRare = null;   // null = すべて, 2〜5 = 特定レア度
-
     var tabButtons = root.querySelectorAll(".tab-btn");
     var rareChips = root.querySelectorAll("#chips-rare .chip");
     var explainBlocks = root.querySelectorAll(".og-explain .explain-block");
     var rareSelector = document.getElementById("sel-rare");
+
+    var currentTab = "all";   // all / rare / inquartz / meteor / ...
+    var currentRare = null;   // null = すべて, 2〜5 = 特定レア度
 
     function updateExplain() {
       Array.prototype.forEach.call(explainBlocks, function (b) {
@@ -67,7 +101,7 @@
           show = groups.indexOf(currentTab) !== -1;
         }
 
-        // レア度タブのときだけ★フィルタ
+        // 「レア度順」タブのときだけ★フィルタ
         if (show && currentTab === "rare" && currentRare !== null) {
           var r = Number(card.getAttribute("data-rare") || 0);
           show = r === currentRare;
@@ -89,15 +123,17 @@
           var t = b.getAttribute("data-tab") || b.dataset.tab;
           var active = t === currentTab;
           b.setAttribute("aria-selected", active ? "true" : "false");
-          b.classList.toggle("is-active", active);
+          if (active) b.classList.add("is-active");
+          else b.classList.remove("is-active");
         });
 
-        // レア以外に移動したら★フィルタ解除
+        // 「レア度順」以外に移動したら★フィルタ解除
         if (currentTab !== "rare") {
           currentRare = null;
           Array.prototype.forEach.call(rareChips, function (c) {
             var f = c.getAttribute("data-filter") || "*";
-            c.classList.toggle("is-active", f === "*");
+            if (f === "*") c.classList.add("is-active");
+            else c.classList.remove("is-active");
           });
         }
 
@@ -107,13 +143,14 @@
       });
     });
 
-    // レア度チップ
+    // レア度チップ（★★★★★～★★）
     Array.prototype.forEach.call(rareChips, function (chip) {
       chip.addEventListener("click", function () {
         var filter = chip.getAttribute("data-filter") || "*";
 
         Array.prototype.forEach.call(rareChips, function (c) {
-          c.classList.toggle("is-active", c === chip);
+          if (c === chip) c.classList.add("is-active");
+          else c.classList.remove("is-active");
         });
 
         if (filter === "*") {
@@ -123,13 +160,14 @@
           currentRare = m ? Number(m[1]) : null;
         }
 
-        // レア度チップを押したらタブも「レア度」に
+        // チップを押したらタブも「レア度順」に
         currentTab = "rare";
         Array.prototype.forEach.call(tabButtons, function (b) {
           var t = b.getAttribute("data-tab") || b.dataset.tab;
           var active = t === "rare";
           b.setAttribute("aria-selected", active ? "true" : "false");
-          b.classList.toggle("is-active", active);
+          if (active) b.classList.add("is-active");
+          else b.classList.remove("is-active");
         });
 
         updateExplain();
@@ -138,7 +176,7 @@
       });
     });
 
-    // 初期状態
+    // 初期表示
     updateExplain();
     updateRareSelector();
     applyFilter();
@@ -147,56 +185,11 @@
   }
 
   // ================================
-  //  カードHTMLを読み込んでからフィルタ初期化
-  // ================================
-  function loadCardsAndInit() {
-    console.log("onReady called");
-
-    var grid = document.getElementById("og-grid");
-    if (!grid) {
-      console.log("#og-grid が見つかりません");
-      return;
-    }
-
-    var src = grid.getAttribute("data-cards-src");
-    console.log("data-cards-src =", src);
-
-    // data-cards-src が無い場合 → そのままフィルタだけ
-    if (!src) {
-      initFilter(document.querySelector(".og") || document, grid);
-      return;
-    }
-
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", src, true);
-
-    xhr.onload = function () {
-      console.log("XHR onload status =", xhr.status);
-      if (xhr.status >= 200 && xhr.status < 300) {
-        grid.innerHTML = xhr.responseText;
-        console.log(
-          "カードHTMLを挿入しました length =",
-          xhr.responseText.length
-        );
-        initFilter(document.querySelector(".og") || document, grid);
-      } else {
-        console.log("カード読み込み失敗 status =", xhr.status);
-      }
-    };
-
-    xhr.onerror = function () {
-      console.log("XHR error で読み込み失敗");
-    };
-
-    xhr.send();
-  }
-
-  // ================================
-  //  DOM 準備完了後に開始
+  //  DOM 準備完了後に init 実行
   // ================================
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", loadCardsAndInit);
+    document.addEventListener("DOMContentLoaded", init);
   } else {
-    loadCardsAndInit();
+    init();
   }
 })();
