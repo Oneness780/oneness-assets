@@ -1,5 +1,5 @@
 (function () {
-  console.log("rare-stones-filter.js loaded");
+  console.log("rare-stones-filter.js initialized (v5)");
 
   // ================================
   //  エントリーポイント
