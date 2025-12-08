@@ -1,236 +1,204 @@
 (function () {
-  'use strict';
+  console.log("rare-stones-filter.js initialized");
 
-  // ==================================
-  //  カード読み込み → フィルタ初期化
-  // ==================================
+  // =====================================
+  // DOM 準備ができてからスタート
+  // =====================================
+  window.addEventListener("DOMContentLoaded", function () {
+    console.log("rare-stones-filter: DOMContentLoaded");
 
-  // タブに応じて「説明ブロック」を切り替え
-  function setActiveExplain(root, tab) {
-    const blocks = root.querySelectorAll('.og-explain .explain-block');
-    blocks.forEach((b) => {
-      const t = b.getAttribute('data-tab');
-      b.style.display = t === tab ? '' : 'none';
-    });
-  }
-
-  function initRareStoneFilter(root, grid) {
-    const tabButtons = Array.from(root.querySelectorAll('.tab-btn'));
-    const chipsRare = Array.from(
-      root.querySelectorAll('#chips-rare .chip')
-    );
-    const rareSelector = root.querySelector('#sel-rare');
-
-    let currentTab = 'all';
-    let currentRareFilter = '*';
-
-    const cards = Array.from(grid.querySelectorAll('.card'));
-    if (cards.length === 0) {
-      console.warn('[rare-stones] カードが見つかりませんでした');
+    const root = document.querySelector(".og");
+    if (!root) {
+      console.log("rare-stones-filter: .og が見つかりません");
       return;
     }
 
-    // 元の並び順を保持
-    cards.forEach((card, idx) => {
-      card.dataset._index = String(idx);
-    });
+    const grid = root.querySelector("#og-grid") || document.getElementById("og-grid");
+    if (!grid) {
+      console.log("rare-stones-filter: #og-grid が見つかりません");
+      return;
+    }
 
-    function applyFilter() {
-      // レア度タブのときだけソート（★の大きい順）
-      if (currentTab === 'rare') {
-        const sorted = [...cards].sort((a, b) => {
-          const ra = parseInt(a.dataset.rare || '0', 10);
-          const rb = parseInt(b.dataset.rare || '0', 10);
-          if (ra !== rb) return rb - ra; // ★多い順
-          const ia = parseInt(a.dataset._index || '0', 10);
-          const ib = parseInt(b.dataset._index || '0', 10);
-          return ia - ib; // 元の並びを維持
+    const src = grid.getAttribute("data-cards-src") || "";
+    console.log("rare-stones-filter: data-cards-src =", src);
+
+    // data-cards-src があれば外部HTMLからカードを取得
+    if (src) {
+      fetch(src, { cache: "no-cache" })
+        .then(function (res) {
+          console.log("rare-stones-filter: fetch status =", res.status);
+          if (!res.ok) {
+            throw new Error("HTTP status " + res.status);
+          }
+          return res.text();
+        })
+        .then(function (html) {
+          console.log("rare-stones-filter: カードHTML取得成功 length =", html.length);
+
+          // 外部HTMLをそのまま差し込む
+          grid.innerHTML = html;
+
+          // 差し込んだカードを元にフィルタ初期化
+          initRareStoneFilter(root, grid);
+        })
+        .catch(function (err) {
+          console.error("rare-stones-filter: カードHTML読み込みエラー", err);
+          // 失敗したら、もし直書きカードがあればそれで初期化
+          initRareStoneFilter(root, grid);
         });
-        sorted.forEach((card) => grid.appendChild(card));
-      } else {
-        // それ以外のタブでは元の順番
-        const original = [...cards].sort(
-          (a, b) =>
-            parseInt(a.dataset._index || '0', 10) -
-            parseInt(b.dataset._index || '0', 10)
-        );
-        original.forEach((card) => grid.appendChild(card));
-      }
+    } else {
+      // inline カードのみの場合
+      console.log("rare-stones-filter: data-cards-src なし → 直書きカードで初期化");
+      initRareStoneFilter(root, grid);
+    }
+  });
 
-      // レア度のフィルタ値（[data-rare="5"] など）から数字だけ取り出し
-      let rareTarget = null;
-      if (currentTab === 'rare' && currentRareFilter !== '*') {
-        const m = currentRareFilter.match(/"(\d)"/);
-        rareTarget = m ? m[1] : null;
-      }
+  // =====================================
+  // フィルタ本体
+  // =====================================
+  function initRareStoneFilter(root, grid) {
+    console.log("rare-stones-filter: initRareStoneFilter start");
 
-      cards.forEach((card) => {
-        const groups = (card.dataset.group || '')
-          .split(/\s+/)
-          .filter(Boolean);
-        const rare = card.dataset.rare || '';
-
-        let visible = true;
-
-        // タブごとの絞り込み
-        if (currentTab !== 'all' && currentTab !== 'rare') {
-          visible = groups.includes(currentTab);
-        }
-
-        // レア度タブのときは★フィルタも適用
-        if (visible && currentTab === 'rare' && rareTarget) {
-          visible = rare === rareTarget;
-        }
-
-        card.style.display = visible ? '' : 'none';
-      });
-
-      // 説明テキストの切り替え
-      setActiveExplain(root, currentTab);
+    const cards = Array.prototype.slice.call(grid.querySelectorAll(".card"));
+    if (!cards.length) {
+      console.log("rare-stones-filter: カードが 0 件です");
+      return;
     }
 
-    // タブボタン
-    tabButtons.forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const tab = btn.dataset.tab;
-        if (!tab || tab === currentTab) return;
+    const tabs = root.querySelectorAll('.tab-btn[role="tab"]');
+    const rareSelector = root.querySelector("#sel-rare");
+    const explainBlocks = root.querySelectorAll(".og-explain .explain-block");
 
-        currentTab = tab;
+    // タブごとのフィルタ種別
+    const TAB_FILTER = {
+      all:      { type: "all" },
+      rare:     { type: "rare" },               // レア度チップで制御
+      inquartz: { type: "group", value: "inquartz" },
+      meteor:   { type: "group", value: "meteor" },
+      rarecolor:{ type: "group", value: "rarecolor" },
+      hq:       { type: "flag",  value: "hq" },
+      star:     { type: "flag",  value: "star" },
+      uv:       { type: "flag",  value: "uv" }
+    };
 
-        tabButtons.forEach((b) =>
-          b.setAttribute(
-            'aria-selected',
-            b === btn ? 'true' : 'false'
-          )
-        );
+    let activeTab = "all";
+    let rareFilter = "*"; // rare タブ用（"*" or "5" "4" "3" "2"）
 
-        if (rareSelector) {
-          rareSelector.style.display =
-            tab === 'rare' ? '' : 'none';
-        }
-
-        // レア度タブに入ったときは★フィルタをリセット
-        if (tab === 'rare') {
-          currentRareFilter = '*';
-          chipsRare.forEach((chip) =>
-            chip.classList.toggle(
-              'is-active',
-              chip.dataset.filter === '*'
-            )
-          );
-        }
-
-        applyFilter();
+    // 説明文の表示切替
+    function setActiveExplain(tab) {
+      if (!explainBlocks.length) return;
+      Array.prototype.forEach.call(explainBlocks, function (block) {
+        var t = block.getAttribute("data-tab");
+        block.classList.toggle("is-active", t === tab);
       });
-    });
-
-    // レア度チップ
-    chipsRare.forEach((chip) => {
-      chip.addEventListener('click', (e) => {
-        e.preventDefault();
-        const f = chip.dataset.filter || '*';
-        currentRareFilter = f;
-        chipsRare.forEach((c) =>
-          c.classList.toggle('is-active', c === chip)
-        );
-        applyFilter();
-      });
-    });
-
-    // 初期状態：タブ「全て」、説明も all を表示
-    if (rareSelector) {
-      rareSelector.style.display = 'none';
     }
-    setActiveExplain(root, 'all');
+
+    // タブの aria-selected 切り替え
+    function setActiveTabButton(tab) {
+      Array.prototype.forEach.call(tabs, function (btn) {
+        var isActive = btn.getAttribute("data-tab") === tab;
+        btn.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+    }
+
+    // レア度チップの is-active 更新
+    function setActiveRareChip(filter) {
+      if (!rareSelector) return;
+      var chips = rareSelector.querySelectorAll(".chip");
+      Array.prototype.forEach.call(chips, function (chip) {
+        var f = chip.getAttribute("data-filter") || "*";
+        chip.classList.toggle("is-active", f === filter);
+      });
+    }
+
+    // カードを表示するかどうか判定
+    function shouldShowCard(card, tabConfig, rareFilterValue) {
+      // rare タブ：レア度のみで判定
+      if (tabConfig.type === "rare") {
+        var r = card.getAttribute("data-rare") || "";
+        if (rareFilterValue !== "*" && r !== rareFilterValue) return false;
+        return true; // rare タブでは他の条件なし
+      }
+
+      // other タブ（all / group / flag）
+      if (tabConfig.type === "all") {
+        return true;
+      }
+
+      if (tabConfig.type === "group") {
+        var g = (card.getAttribute("data-group") || "").split(/\s+/);
+        return g.indexOf(tabConfig.value) !== -1;
+      }
+
+      if (tabConfig.type === "flag") {
+        var f = (card.getAttribute("data-flag") || "").split(/\s+/);
+        return f.indexOf(tabConfig.value) !== -1;
+      }
+
+      return true;
+    }
+
+    // 実際にカードを表示・非表示
+    function applyFilter() {
+      var tabConfig = TAB_FILTER[activeTab] || TAB_FILTER.all;
+
+      Array.prototype.forEach.call(cards, function (card) {
+        var show = shouldShowCard(card, tabConfig, rareFilter);
+        card.style.display = show ? "" : "none";
+        card.classList.toggle("is-visible", show);
+      });
+    }
+
+    // rare タブの時だけレア度セレクタを表示
+    function updateRareSelectorVisibility() {
+      if (!rareSelector) return;
+      rareSelector.classList.toggle("is-active", activeTab === "rare");
+    }
+
+    // --- 初期状態 ---
+    setActiveTabButton(activeTab);
+    setActiveExplain(activeTab);
+    updateRareSelectorVisibility();
+    setActiveRareChip(rareFilter);
     applyFilter();
 
-    console.log(
-      `[rare-stones] フィルタ初期化完了（カード数: ${cards.length}）`
-    );
-  }
+    // --- タブクリック ---
+    Array.prototype.forEach.call(tabs, function (btn) {
+      btn.addEventListener("click", function () {
+        var tab = btn.getAttribute("data-tab");
+        if (!tab || !TAB_FILTER[tab] && tab !== "rare") {
+          tab = "all";
+        }
 
-function loadCardsAndInit() {
-  // ルート（.og）とグリッド（#og-grid）を取得
-  const root = document.querySelector(".og");
-  if (!root) return;
+        activeTab = tab;
 
-  const grid = root.querySelector("#og-grid") || document.getElementById("og-grid");
-  if (!grid) return;
+        // rare タブに入ったときは、毎回「すべて（★5→★2順）」にリセット
+        if (activeTab === "rare") {
+          rareFilter = "*";
+          setActiveRareChip(rareFilter);
+        }
 
-  const src = grid.getAttribute("data-cards-src");
-
-  // data-cards-src が無い場合 → そのままフィルタ初期化（従来通り）
-  if (!src) {
-    console.log("rare-stones-filter: data-cards-src なし → 直書きカードを使用");
-    initRareStoneFilter(root, grid);
-    return;
-  }
-
-  // 外部 HTML からカードを読み込む
-  console.log("rare-stones-filter: カードHTMLを取得:", src);
-
-  fetch(src, { cache: "no-cache" })
-    .then((res) => {
-      if (!res.ok) {
-        throw new Error("HTTP status " + res.status);
-      }
-      return res.text();
-    })
-    .then((html) => {
-      console.log("rare-stones-filter: カードHTML取得成功 / length=", html.length);
-
-      // ★ 余計なことはせず、そのまま差し込む
-      grid.innerHTML = html;
-
-      // 差し込んだカードを元にフィルタ初期化
-      initRareStoneFilter(root, grid);
-    })
-    .catch((err) => {
-      console.error("rare-stones-filter: カードHTML読み込みエラー", err);
-
-      // 失敗しても、もしページ内に直書きのカードがあればそれで動かす
-      initRareStoneFilter(root, grid);
+        setActiveTabButton(activeTab);
+        setActiveExplain(activeTab);
+        updateRareSelectorVisibility();
+        applyFilter();
+      });
     });
-}
 
+    // --- レア度チップクリック ---
+    if (rareSelector) {
+      rareSelector.addEventListener("click", function (e) {
+        var chip = e.target.closest(".chip");
+        if (!chip) return;
+        if (activeTab !== "rare") return; // rare タブのときだけ反応
 
-    try {
-      console.log(
-        '[rare-stones] カードHTMLを取得:',
-        src
-      );
-      const res = await fetch(src, { cache: 'no-cache' });
-      if (!res.ok) {
-        throw new Error(
-          `HTTP ${res.status} ${res.statusText}`
-        );
-      }
-      const html = await res.text();
-      const doc = new DOMParser().parseFromString(
-        html,
-        'text/html'
-      );
-      const cards = doc.querySelectorAll('.card');
-
-      grid.innerHTML = '';
-      cards.forEach((card) => grid.appendChild(card));
-
-      console.log(
-        `[rare-stones] カード読み込み完了: ${cards.length}件`
-      );
-      initRareStoneFilter(root, grid);
-    } catch (e) {
-      console.error(
-        '[rare-stones] カードHTMLの読み込みに失敗しました',
-        e
-      );
+        var filter = chip.getAttribute("data-filter") || "*";
+        rareFilter = filter;
+        setActiveRareChip(rareFilter);
+        applyFilter();
+      });
     }
-  }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', loadCardsAndInit);
-  } else {
-    loadCardsAndInit();
+    console.log("rare-stones-filter: initRareStoneFilter done");
   }
 })();
